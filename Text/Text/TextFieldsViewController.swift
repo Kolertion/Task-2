@@ -2,6 +2,8 @@ import UIKit
 
 class TextFieldsViewController: UIViewController, UITextFieldDelegate {
     
+    private var keyboardManager: KeyboardManager?
+    
     private var scrollView: UIScrollView = {
         let scrollView = UIScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -53,6 +55,8 @@ class TextFieldsViewController: UIViewController, UITextFieldDelegate {
         label.backgroundColor = .clear
         label.layer.cornerRadius = 4
         label.clipsToBounds = true
+        label.frame = CGRect(x: 0, y: 0, width: 40, height: 44)
+        label.textAlignment = .center
         return label
     }()
     
@@ -112,6 +116,16 @@ class TextFieldsViewController: UIViewController, UITextFieldDelegate {
         super.viewDidLoad()
         setupView()
         setupTextFieldDelegates()
+        setupKeyboardManager()
+    }
+    
+    private func setupKeyboardManager() {
+        keyboardManager = KeyboardManager(scrollView: scrollView, view: view)
+        keyboardManager?.registerForKeyboardNotifications()
+    }
+    
+    deinit {
+        keyboardManager?.unregisterKeyboardNotifications()
     }
     
     // Setup view method
@@ -229,5 +243,4 @@ class TextFieldsViewController: UIViewController, UITextFieldDelegate {
     func getInputLimitTextField() -> UITextField {
         return inputLimitTextField
     }
-    
 }

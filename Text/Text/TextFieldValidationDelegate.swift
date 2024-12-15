@@ -30,10 +30,6 @@ class TextFieldValidationDelegate: NSObject, UITextFieldDelegate {
                     inputLimitCountLabel.textColor = .red
                     textField.layer.borderColor = UIColor.red.cgColor
                     textField.layer.borderWidth = 1
-                } else if remainingCharacters <= 2 {
-                    inputLimitCountLabel.textColor = .orange
-                    textField.layer.borderColor = nil
-                    textField.layer.borderWidth = 0
                 } else {
                     inputLimitCountLabel.textColor = .black
                     textField.layer.borderColor = nil
@@ -60,8 +56,18 @@ class TextFieldValidationDelegate: NSObject, UITextFieldDelegate {
         
         // Password field
         if textField == viewController?.passwordTextField {
-            updatePasswordRules(textField.text ?? "")
-            updatePasswordProgressBar(textField.text ?? "")
+            // Calculate the updated password
+            guard let currentText = textField.text,
+                  let textRange = Range(range, in: currentText) else {
+                return true
+            }
+            
+            let updatedPassword = currentText.replacingCharacters(in: textRange, with: string)
+            
+            DispatchQueue.main.async { [weak self] in
+                self?.updatePasswordRules(updatedPassword)
+                self?.updatePasswordProgressBar(updatedPassword)
+            }
         }
         
         return true
@@ -106,33 +112,50 @@ class TextFieldValidationDelegate: NSObject, UITextFieldDelegate {
     private func validateAndPrepareLink(_ textField: UITextField) {
         guard var urlString = textField.text else { return }
         
-        // Make sure that the prefix https://
+        // Make sure that the prefix https:// is present
         if !urlString.hasPrefix("https://") {
             urlString = "https://" + urlString
         }
         
-        // Checking and trying to open a URL
-        if let url = URL(string: urlString), UIApplication.shared.canOpenURL(url) {
-            print("Valid URL: \(url)")
-            
-            // Optional: Add a tap gesture to open a URL
-            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(openURL))
-            textField.addGestureRecognizer(tapGesture)
-            textField.isUserInteractionEnabled = true
-        } else {
-            print("Invalid URL")
-        }
-    }
-    
-    @objc private func openURL() {
-        guard let viewController = viewController,
-              let urlString = viewController.linkTextField.text,
-              let url = URL(string: urlString),
-              UIApplication.shared.canOpenURL(url) else {
+        // Check if the URL is valid
+        guard let url = URL(string: urlString) else {
+            print("Invalid URL format")
             return
         }
         
-        UIApplication.shared.open(url)
+        // Perform URL validation using URLSession
+        let semaphore = DispatchSemaphore(value: 0)
+        var isValidURL = false
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5 // Set a timeout to prevent long waits
+        
+        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            defer { semaphore.signal() }
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                isValidURL = false
+                return
+            }
+            
+            isValidURL = true
+        }
+        task.resume()
+        
+        // Wait for the validation to complete (with a timeout)
+        _ = semaphore.wait(timeout: .now() + 5)
+        
+        // If the URL is valid and exists, open it
+        if isValidURL {
+            print("Valid URL: \(url)")
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url)
+            }
+        } else {
+            print("URL does not exist or is inaccessible")
+        }
     }
     
     private func updatePasswordRules(_ password: String) {
